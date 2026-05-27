@@ -1,207 +1,283 @@
-import streamlit as st
-import pandas as pd
-import json
-import os
-import random
-import calendar
-from datetime import datetime
-
-# Configurazione Pagina
-st.set_page_config(page_title="Sceriffi Stats Center 🏆", layout="wide")
-
-# DATI BASE FISSI
-BASE_ALL_TIME = { "Cosimo": 595, "Alessio DI": 450, "Simone": 191 }
-BASE_2026 = { "Cosimo": 112, "Alessio DI": 89, "Simone": 22 }
-NOMI = list(BASE_ALL_TIME.keys())
-COLORI = ['#38bdf8', '#fbbf24', '#34d399']
-
-# FILE DATABASE CONDIVISO (Sul server)
-DB_FILE = "sceriffi_db_v2.json"
-
-def carica_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def salva_db(db):
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=4)
-
-db = carica_db()
-
-# --- INPUT DI GIOCO (Nomi temporanei per il sorteggio) ---
-if 'nomi_sorteggio' not in st.session_state:
-    st.session_state.nomi_sorteggio = NOMI.copy()
-
-# Titolo Principale
-st.markdown("<h1 style='text-align: center;'>🏆 Portale Sceriffi</h1>", unsafe_allow_html=True)
-
-# Layout a schede (Tabs) per un'interfaccia pulita
-tab_sorteggio, tab_calendario, tab_classifiche = st.tabs(["🎡 Sorteggio Scontri", "📅 Calendario Live", "📊 Classifiche & Analisi"])
-
-# ==========================================
-# TAB 1: SORTEGGIO SCONTRI
-# ==========================================
-with tab_sorteggio:
-    st.subheader("🎡 Sorteggio Scontri")
-    
-    # Modifica nomi temporanei
-    with st.expander("✏️ Modifica nomi per questo sorteggio (Scherzi/Soprannomi)"):
-        nomi_input = st.text_input("Nomi separati da virgola:", value=", ".join(st.session_state.nomi_sorteggio))
-        if st.button("Aggiorna Nomi Temporanei"):
-            st.session_state.nomi_sorteggio = [n.strip() for n in nomi_input.split(",") if n.strip()]
-            st.success("Nomi aggiornati per il sorteggio!")
-
-    col_w1, col_w2 = st.columns(2)
-    
-    if st.button("🔥 SFIDA!", use_container_width=True):
-        if len(st.session_state.nomi_sorteggio) >= 2:
-            p1 = random.choice(st.session_state.nomi_sorteggio)
-            p2 = random.choice(st.session_state.nomi_sorteggio)
-            while p1 == p2:
-                p2 = random.choice(st.session_state.nomi_sorteggio)
-            
-            st.markdown(f"<h2 style='text-align: center; color: #fbbf24;'>{p1} ⚔️ {p2}</h2>", unsafe_allow_html=True)
-            st.balloons()
-        else:
-            st.error("Servono almeno 2 giocatori per il sorteggio!")
-
-# ==========================================
-# TAB 2: CALENDARIO LIVE
-# ==========================================
-with tab_calendario:
-    st.subheader("📅 Gestione Calendario Giornaliero")
-    
-    # Selettore Data di Streamlit (Molto più comodo)
-    data_selezionata = st.date_input("Seleziona il giorno da modificare o visualizzare:", datetime.now())
-    data_key = data_selezionata.strftime("%Y-%m-%d")
-    
-    st.markdown(f"### Giorno: `{data_selezionata.strftime('%d/%m/%Y')}`")
-    
-    # Form per modificare i punteggi del giorno
-    punti_giorno = db.get(data_key, {n: 0 for n in NOMI})
-    
-    col_inputs = st.columns(len(NOMI))
-    nuovi_punti = {}
-    for i, n in enumerate(NOMI):
-        with col_inputs[i]:
-            nuovi_punti[n] = st.number_input(f"Stelle per {n}", min_value=0, value=punti_giorno.get(n, 0), step=1, key=f"in_{n}")
-            
-    if st.button("Salva Punteggio Giorno"):
-        # Se tutti i punti sono 0, elimina il giorno dal DB
-        if sum(nuovi_punti.values()) == 0:
-            if data_key in db:
-                del db[data_key]
-        else:
-            db[data_key] = nuovi_punti
-        salva_db(db)
-        st.success("Dati salvati sul server!")
-        st.rerun()
-
-# ==========================================
-# TAB 3: CLASSIFICHE & ANALISI
-# ==========================================
-with tab_classifiche:
-    st.subheader("📊 Classifiche e Rendimento")
-    
-    # Selezione Mese/Anno per filtri statistici
-    oggi = datetime.now()
-    col_m, col_y = st.columns(2)
-    with col_m:
-        mese_sel = st.selectbox("Seleziona Mese per analisi:", list(range(1, 13)), index=oggi.month-1, format_func=lambda x: calendar.month_name[x].upper())
-    with col_y:
-        anno_sel = st.selectbox("Seleziona Anno per analisi:", [2026, 2027, 2028], index=0)
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Sceriffi Stats Center 🏆</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f1f5f9; --gold: #fbbf24; --red: #f87171; --green: #34d399; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+        .main-container { max-width: 1100px; margin: auto; }
+        .draggable-section { position: relative; margin-bottom: 30px; background: var(--card); padding: 25px; border-radius: 15px; border: 1px solid #334155; overflow: hidden; }
+        .controls-top { position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; z-index: 20; }
+        .drag-handle { cursor: grab; background: #475569; color: white; padding: 4px 10px; border-radius: 4px; }
+        .edit-icon { cursor: pointer; color: var(--accent); font-size: 1.2rem; margin-right: 5px; }
+        .ranking-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-top: 20px; }
+        .rank-card { background: rgba(15, 23, 42, 0.5); padding: 15px; border-radius: 10px; border: 1px solid #475569; }
+        .leaderboard-row { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+        .leaderboard-row:first-child { color: var(--gold); font-weight: bold; background: rgba(251, 191, 36, 0.05); }
+        .rank-num { color: var(--accent); width: 20px; display: inline-block; }
+        .header-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .nav-btn { background: var(--accent); color: #0f172a; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .day { background: #0f172a; padding: 10px 2px; border-radius: 6px; cursor: pointer; border: 1px solid #334155; min-height: 65px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .day.has-data { border-bottom: 3px solid var(--gold); }
+        .day .day-num { font-weight: bold; font-size: 1.1rem; }
+        .day .day-stars { font-size: 0.75rem; color: var(--gold); margin-top: 4px; }
+        .stats-wrapper { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; align-items: center; width: 100%; margin-top: 10px; }
+        .chart-container { flex: 1; min-width: 280px; max-width: 450px; height: 300px; position: relative; background: rgba(0,0,0,0.1); border-radius: 10px; padding: 15px; margin-bottom: 10px; }
+        h3 { color: var(--gold); margin: 0 0 15px 0; text-transform: uppercase; font-size: 1rem; letter-spacing: 1px; }
+        h4 { margin-bottom: 10px; text-align: center; font-size: 0.9rem; opacity: 0.8; }
+        .btn-danger { background: var(--red); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 20px; }
         
-    year_key = str(anno_sel)
-    month_key = f"{mese_sel:02d}"
-    
-    # Ricalcolo Statistiche
-    stats_mese = {n: 0 for n in NOMI}
-    stats_anno = {n: (BASE_2026[n] if year_key == "2026" else 0) for n in NOMI}
-    stats_all = {n: BASE_ALL_TIME[n] for n in NOMI}
-    
-    for k, v in db.items():
-        y, m, d = k.split('-')
-        for n in NOMI:
-            punti = v.get(n, 0)
-            stats_all[n] += punti
-            if y == year_key:
-                stats_anno[n] += punti
-            if y == year_key and m == month_key:
-                stats_mese[n] += punti
-
-    # Visualizzazione Classifiche in Colonne
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(f"#### 🔵 MENSILE ({calendar.month_name[mese_sel].upper()})")
-        st.dataframe(pd.Series(stats_mese).sort_values(ascending=False), column_config={"value": "Stelle ⭐"}, use_container_width=True)
-    with c2:
-        st.markdown(f"#### 🟢 ANNUALE ({year_key})")
-        st.dataframe(pd.Series(stats_anno).sort_values(ascending=False), column_config={"value": "Stelle ⭐"}, use_container_width=True)
-    with c3:
-        st.markdown("#### 🌍 ALL TIME")
-        st.dataframe(pd.Series(stats_all).sort_values(ascending=False), column_config={"value": "Stelle ⭐"}, use_container_width=True)
-
-    st.markdown("---")
-    st.markdown(f"### 💡 RECORD DEL MESE (Esclusi i Weekend)")
-    
-    # LOGICA DI CALCOLO STRISCE E LETARGHI (SOLO LUN-VEN DEL MESE SELEZIONATO)
-    num_giorni_mese = calendar.monthrange(anno_sel, mese_sel)[1]
-    giorni_lavorativi = []
-    for d in range(1, num_giorni_mese + 1):
-        if calendar.weekday(anno_sel, mese_sel, d) < 5: # Da 0 (Lunedì) a 4 (Venerdì)
-            giorni_lavorativi.append(f"{year_key}-{month_key}-{d:02d}")
+        /* Modulo Ruote */
+        .wheels-container { display: flex; justify-content: center; gap: 40px; margin-top: 20px; }
+        .wheel-wrapper { position: relative; display: flex; flex-direction: column; align-items: center; }
+        .pointer { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 15px solid var(--gold); margin-bottom: 8px; }
+        .ruota { width: 150px; height: 150px; border-radius: 50%; border: 6px solid var(--gold); transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99); background: conic-gradient(var(--accent) 0deg 120deg, var(--gold) 120deg 240deg, var(--green) 240deg 360deg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .ruota-label { color: var(--gold); font-weight: bold; font-size: 0.9rem; text-shadow: 1px 1px 2px #000; }
+        .btn-sfida { background: var(--gold); color: #0f172a; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 20px; }
+        .confetti { position: absolute; width: 10px; height: 10px; border-radius: 50%; pointer-events: none; animation: explode 1.5s ease-out forwards; }
+        @keyframes explode { to { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; } }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1 style="text-align:center">🏆 Portale Sceriffi</h1>
+        <div id="main-sortable">
+            <section class="draggable-section" data-id="roulette">
+                <div class="controls-top">
+                    <span class="edit-icon" onclick="editNomi()">✏️</span>
+                    <div class="drag-handle">⠿</div>
+                </div>
+                <h3>🎡 Sorteggio Scontri</h3>
+                <div class="wheels-container">
+                    <div class="wheel-wrapper"><div class="pointer"></div><div id="w1" class="ruota"><span class="ruota-label" id="l1">?</span></div></div>
+                    <div class="wheel-wrapper"><div class="pointer"></div><div id="w2" class="ruota"><span class="ruota-label" id="l2">?</span></div></div>
+                </div>
+                <div style="text-align:center;"><button class="btn-sfida" onclick="sorteggia()">SFIDA!</button></div>
+                <div id="match-display" style="text-align:center; margin-top:20px; font-weight:bold; font-size:1.4rem; color:var(--text);">In attesa di sorteggio...</div>
+            </section>
             
-    streaks = {n: {"max": 0, "curr": 0} for n in NOMI}
-    letarghi = {n: {"max": 0, "curr": 0} for n in NOMI}
-    fotofinish = {n: 0 for n in NOMI}
-    
-    # Calcolo Strisce e Letarghi
-    for k in giorni_lavorativi:
-        for n in NOMI:
-            pts = db.get(k, {}).get(n, 0)
-            if pts > 0:
-                streaks[n]["curr"] += 1
-                streaks[n]["max"] = max(streaks[n]["max"], streaks[n]["curr"])
-                letarghi[n]["curr"] = 0
-            else:
-                streaks[n]["curr"] = 0
-                letarghi[n]["curr"] += 1
-                letarghi[n]["max"] = max(letarghi[n]["max"], letarghi[n]["curr"])
-                
-    # Calcolo Fotofinish (Ultimi 3 giorni lavorativi)
-    for k in giorni_lavorativi[-3:]:
-        for n in NOMI:
-            fotofinish[n] += db.get(k, {}).get(n, 0)
+            <section class="draggable-section" data-id="cal">
+                <div class="controls-top"><div class="drag-handle">⠿</div></div>
+                <h3>📅 Calendario Live</h3>
+                <div class="header-nav"><button class="nav-btn" onclick="cambiaMese(-1)">◀</button><div id="mese-corrente" style="font-weight:bold; color:var(--accent); font-size: 1.2rem;"></div><button class="nav-btn" onclick="cambiaMese(1)">▶</button></div>
+                <div class="calendar" id="cal-grid"></div>
+            </section>
+
+            <section class="draggable-section" data-id="ranking">
+                <div class="controls-top"><div class="drag-handle">⠿</div></div>
+                <h3>📊 Classifiche Sceriffi</h3>
+                <div class="ranking-grid">
+                    <div class="rank-card"><h4 id="title-mensile" style="color:var(--accent); margin-top:0;">MENSILE</h4><div id="lb-mensile"></div></div>
+                    <div class="rank-card"><h4 id="title-annuale" style="color:var(--green); margin-top:0;">ANNUALE</h4><div id="lb-annuale"></div></div>
+                    <div class="rank-card"><h4 style="color:var(--gold); margin-top:0;">ALL TIME 🌍</h4><div id="lb-alltime"></div></div>
+                    <div class="rank-card"><h4 id="title-extra" style="color:var(--red); margin-top:0;">💡 RECORD MESE</h4><div id="lb-extra" style="font-size:0.85rem; display:flex; flex-direction:column; gap:10px; margin-top:10px;"></div></div>
+                </div>
+            </section>
+
+            <section class="draggable-section" data-id="stats">
+                <div class="controls-top"><div class="drag-handle">⠿</div></div>
+                <h3>📈 Analisi Performance</h3>
+                <div class="stats-wrapper">
+                    <div class="chart-container"><h4 style="color:var(--accent)">Distribuzione Mese</h4><canvas id="pChart"></canvas></div>
+                    <div class="chart-container"><h4 style="color:var(--green)">Andamento Mensile</h4><canvas id="lChart"></canvas></div>
+                </div>
+                <div class="stats-wrapper" style="margin-top: 30px; border-top: 1px solid #334155; padding-top: 20px;">
+                    <div class="chart-container" style="max-width: 650px; height: 350px;"><h4 style="color:var(--gold)">Ripartizione Totale All Time (%)</h4><canvas id="allTimePieChart"></canvas></div>
+                </div>
+            </section>
+        </div>
+        <div style="text-align: center; opacity: 0.6; margin-bottom: 40px;"><button class="btn-danger" onclick="resetTotale()">🗑️ RESETTA SOLO LIVE</button></div>
+    </div>
+    <div id="edit-day" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#000; border:2px solid var(--accent); padding:30px; z-index:100; border-radius:15px; min-width:320px; box-shadow: 0 0 50px rgba(0,0,0,0.9);">
+        <h2 id="day-title" style="color:var(--gold); margin-top:0;">Giorno</h2><div id="edit-list"></div>
+        <button class="nav-btn" onclick="document.getElementById('edit-day').style.display='none'" style="width:100%; margin-top:20px;">Salva e Chiudi</button>
+    </div>
+
+    <script>
+        const BASE_ALL_TIME = { "Cosimo": 595, "Alessio DI": 450, "Simone": 191 };
+        const BASE_2026 = { "Cosimo": 112, "Alessio DI": 89, "Simone": 22 };
+        const nomi = Object.keys(BASE_ALL_TIME);
+        let nomiSorteggio = [...nomi];
+        const colori = ['#38bdf8', '#fbbf24', '#34d399'];
+        let db = JSON.parse(localStorage.getItem('sceriffi_db_v2')) || {};
+        let dataVis = new Date();
+        let charts = {};
+
+        function editNomi() {
+            let input = prompt("Inserisci i nomi per il sorteggio (separati da virgola):", nomiSorteggio.join(", "));
+            if (input) nomiSorteggio = input.split(",").map(n => n.trim());
+        }
+
+        function sorteggia() {
+            const w1 = document.getElementById('w1'), w2 = document.getElementById('w2');
+            const display = document.getElementById('match-display');
+            const segmentAngle = 360 / nomiSorteggio.length;
+            const r1 = Math.floor(Math.random() * nomiSorteggio.length);
+            let r2 = Math.floor(Math.random() * nomiSorteggio.length);
+            while(r1 === r2) r2 = Math.floor(Math.random() * nomiSorteggio.length);
+
+            w1.style.transform = `rotate(${2880 + (r1 * segmentAngle) + (segmentAngle/2)}deg)`;
+            w2.style.transform = `rotate(${2880 + (r2 * segmentAngle) + (segmentAngle/2)}deg)`;
+            display.innerText = "Girando...";
+
+            setTimeout(() => {
+                const n1 = nomiSorteggio[r1], n2 = nomiSorteggio[r2];
+                document.getElementById('l1').innerText = n1;
+                document.getElementById('l2').innerText = n2;
+                display.innerHTML = `<span style="color:var(--accent)">${n1}</span> ⚔️ <span style="color:var(--red)">${n2}</span>`;
+                for(let i=0; i<30; i++) {
+                    const c = document.createElement('div'); c.className = 'confetti';
+                    c.style.left = '50%'; c.style.top = '50%';
+                    c.style.setProperty('--tx', (Math.random()-0.5)*600 + 'px');
+                    c.style.setProperty('--ty', (Math.random()-0.5)*600 + 'px');
+                    c.style.background = colori[Math.floor(Math.random()*colori.length)];
+                    document.body.appendChild(c);
+                    setTimeout(() => c.remove(), 1500);
+                }
+            }, 4000);
+        }
+
+        Sortable.create(document.getElementById('main-sortable'), { handle: '.drag-handle', animation: 150 });
+        
+        function render() {
+            const y = dataVis.getFullYear(), m = dataVis.getMonth(), monthKey = String(m + 1).padStart(2, '0'), yearKey = String(y);
+            renderCal(y, m);
             
-    killer_name = max(fotofinish, key=fotofinish.get)
-    killer_val = fotofinish[killer_name]
-    killer_display = f"{killer_name} ({killer_val} ⭐)" if killer_val > 0 else "Nessuno"
+            let statsMese = {}, statsAnno = {}, statsAll = {};
+            nomi.forEach(n => { statsMese[n] = 0; statsAnno[n] = (yearKey === "2026") ? BASE_2026[n] : 0; statsAll[n] = BASE_ALL_TIME[n]; });
+            
+            for (let k in db) {
+                const [year, month] = k.split('-');
+                nomi.forEach(n => {
+                    const punti = db[k][n] || 0;
+                    statsAll[n] += punti;
+                    if (year === yearKey) statsAnno[n] += punti;
+                    if (year === yearKey && month === monthKey) statsMese[n] += punti;
+                });
+            }
+            
+            const nomeMeseCorrente = dataVis.toLocaleDateString('it-IT', {month:'long'}).toUpperCase();
+            document.getElementById('title-mensile').innerText = nomeMeseCorrente;
+            document.getElementById('title-annuale').innerText = "ANNO " + y;
+            document.getElementById('title-extra').innerText = `💡 RECORD ${nomeMeseCorrente} (LUN-VEN)`;
+            
+            fillLB('lb-mensile', statsMese); 
+            fillLB('lb-annuale', statsAnno); 
+            fillLB('lb-alltime', statsAll);
+            
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            
+            // FILTRAGGIO COMPLETO: Isola solo i giorni da Lunedì a Venerdì del mese in esame
+            let giorniLavorativi = [];
+            for (let d = 1; d <= lastDay; d++) {
+                let dayOfWeek = new Date(y, m, d).getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Esclude Domenica (0) e Sabato (6)
+                    giorniLavorativi.push(`${yearKey}-${monthKey}-${String(d).padStart(2, '0')}`);
+                }
+            }
 
-    # Display dei record in colonne grafiche
-    rec1, rec2, rec3 = st.columns(3)
-    with rec1:
-        st.metric("🔥 Striscia di Fuoco Massima", f"{max(streaks, key=lambda x: streaks[x]['max'])}", f"{max(streaks[n]['max'] for n in NOMI)} giorni")
-    with rec2:
-        st.metric("💤 Il Letargo Massimo", f"{max(letarghi, key=lambda x: letarghi[x]['max'])}", f"{max(letarghi[n]['max'] for n in NOMI)} giorni")
-    with rec3:
-        st.metric("📈 Killer del Fotofinish", killer_display)
+            // 1. Calcolo Killer del fotofinish (ultimi 3 giorni LAVORATIVI effettivi del mese)
+            let fotofinishScores = {};
+            nomi.forEach(n => fotofinishScores[n] = 0);
+            
+            let ultimi3GiorniLav = giorniLavorativi.slice(-3);
+            ultimi3GiorniLav.forEach(k => {
+                if (db[k]) nomi.forEach(n => fotofinishScores[n] += (db[k][n] || 0));
+            });
+            
+            let maxFoto = -1, killerName = "Nessuno";
+            nomi.forEach(n => {
+                if (fotofinishScores[n] > maxFoto) { maxFoto = fotofinishScores[n]; killerName = n; }
+            });
+            let killerDisplay = maxFoto > 0 ? `${killerName} (${maxFoto} ⭐)` : "Nessuno ancora";
 
-    # GRAFICI CON STREAMLIT NATIVO
-    st.markdown("### 📈 Grafici di Performance")
-    g1, g2 = st.columns(2)
-    with g1:
-        st.markdown("#### Distribuzione Mese Corrente")
-        st.bar_chart(pd.Series(stats_mese))
-    with g2:
-        st.markdown("#### Performance Storica All Time")
-        st.line_chart(pd.Series(stats_all))
+            // 2. Calcolo Strisce e Letarghi (ciclato sequenzialmente SOLO sui giorni feriali)
+            let streaks = {}, letarghi = {};
+            nomi.forEach(n => { streaks[n] = { max: 0, curr: 0 }; letarghi[n] = { max: 0, curr: 0 }; });
+            
+            giorniLavorativi.forEach(k => {
+                nomi.forEach(n => {
+                    let pts = db[k]?.[n] || 0;
+                    if (pts > 0) {
+                        streaks[n].curr++;
+                        if (streaks[n].curr > streaks[n].max) streaks[n].max = streaks[n].curr;
+                        letarghi[n].curr = 0;
+                    } else {
+                        streaks[n].curr = 0;
+                        letarghi[n].curr++;
+                        if (letarghi[n].curr > letarghi[n].max) letarghi[n].max = letarghi[n].curr;
+                    }
+                });
+            });
+            
+            document.getElementById('lb-extra').innerHTML = `
+                <div style="border-bottom: 1px solid #334155; padding-bottom: 6px;">
+                    <span style="color:var(--gold); font-weight:bold;">🔥 Striscia di Fuoco</span><br>
+                    ${nomi.map(n => `<b>${n}:</b> ${streaks[n].max} gg`).join(' | ')}
+                </div>
+                <div style="border-bottom: 1px solid #334155; padding-bottom: 6px;">
+                    <span style="color:var(--accent); font-weight:bold;">💤 Il Letargo</span><br>
+                    ${nomi.map(n => `<b>${n}:</b> ${letarghi[n].max} gg`).join(' | ')}
+                </div>
+                <div>
+                    <span style="color:var(--green); font-weight:bold;">📈 Killer fotofinish (ultimi 3gg lav)</span><br>
+                    <span>${killerDisplay}</span>
+                </div>
+            `;
 
-# Bottone di Reset Totale in fondo
-st.markdown("<br><br><br>", unsafe_allow_html=True)
-if st.button("🗑️ RESETTA SOLO LIVE CONDIVISO", type="primary"):
-    if st.checkbox("Confermo di voler azzerare il database sul server"):
-        salva_db({})
-        st.success("Database azzerato!")
-        st.rerun()
+            updateCharts(statsMese, statsAll, yearKey, monthKey);
+        }
+
+        function renderCal(y, m) {
+            const grid = document.getElementById('cal-grid'); grid.innerHTML = '';
+            document.getElementById('mese-corrente').innerText = dataVis.toLocaleDateString('it-IT',{month:'long',year:'numeric'}).toUpperCase();
+            const start = new Date(y, m, 1).getDay(), end = new Date(y, m+1, 0).getDate();
+            for(let i=0; i<((start===0)?6:start-1); i++) grid.innerHTML += '<div></div>';
+            for(let d=1; d<=end; d++) {
+                const k = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                let dailyTotal = 0;
+                if(db[k]) nomi.forEach(n => dailyTotal += (db[k][n] || 0));
+                grid.innerHTML += `<div class="day ${dailyTotal>0?'has-data':''}" onclick="openDay('${k}')"><span class="day-num">${d}</span><span class="day-stars">${dailyTotal > 0 ? dailyTotal + ' ⭐' : ''}</span></div>`;
+            }
+        }
+        function fillLB(id, dataMap) {
+            const container = document.getElementById(id); container.innerHTML = '';
+            const sorted = nomi.map(n => ({n, s: dataMap[n]})).sort((a,b) => b.s - a.s);
+            sorted.forEach((p, i) => { container.innerHTML += `<div class="leaderboard-row"><span><span class="rank-num">${i+1}°</span> ${p.n}</span><span>${p.s} ⭐</span></div>`; });
+        }
+        function openDay(k) {
+            document.getElementById('edit-day').style.display='block';
+            document.getElementById('day-title').innerText = k.split('-').reverse().join('/');
+            const el = document.getElementById('edit-list'); el.innerHTML = '';
+            nomi.forEach(n => {
+                const v = (db[k] && db[k][n]) ? db[k][n] : 0;
+                el.innerHTML += `<div style="display:flex; justify-content:space-between; margin:15px 0; align-items:center;"><b>${n}</b><div><button class="nav-btn" onclick="set('${k}','${n}',-1)">-</button><span style="width:40px; display:inline-block; text-align:center; font-weight:bold; color:var(--gold)">${v}</span><button class="nav-btn" onclick="set('${k}','${n}',1)">+</button></div></div>`;
+            });
+        }
+        function set(k,n,v) {
+            if(!db[k]) db[k] = {};
+            db[k][n] = Math.max(0, (db[k][n] || 0) + v);
+            if(Object.values(db[k]).reduce((a,b)=>a+b,0) === 0) delete db[k];
+            localStorage.setItem('sceriffi_db_v2', JSON.stringify(db));
+            openDay(k); render();
+        }
+        function updateCharts(tM, tAll, yearKey, monthKey) {
+            if(!window.Chart) return;
+            if(charts.p) charts.p.destroy(); if(charts.l) charts.l.destroy(); if(charts.all) charts.all.destroy();
+            charts.p = new Chart(document.getElementById('pChart'), { type:'doughnut', data:{ labels:nomi, datasets:[{data:nomi.map(n=>tM[n]), backgroundColor:colori, borderWidth:0}] }, options:{ maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{color:'#fff', font:{size:10}}}}} });
+            const totalSum = Object.values(tAll).reduce((a,b) => a+b, 0);
+            charts.all = new Chart(document.getElementById('allTimePieChart'), { type:'pie', data:{ labels:nomi.map(n=>`${n} (${((tAll[n]/totalSum)*100).toFixed(1)}%)`), datasets:[{data:nomi.map(n=>tAll[n]), backgroundColor:colori, borderWidth:1, borderColor: '#1e293b'}] }, options:{ maintainAspectRatio:false, layout: { padding: 10 }, plugins:{ legend:{ position:'right', labels:{color:'#fff', font:{size:11}, padding: 15}} } } });
+            const days = new Date(yearKey, monthKey, 0).getDate();
+            const labs = Array.from({length:days},(_,i)=>i+1);
+            charts.l = new Chart(document.getElementById('lChart'), { type:'line', data:{ labels:labs, datasets:nomi.map((n,i)=>({ label:n, borderColor:colori[i], tension:0.3, pointRadius:2, data:labs.map(d=>db[`${yearKey}-${monthKey}-${String(d).padStart(2,'0')}`]?.[n] || 0) })) }, options:{ maintainAspectRatio:false, scales:{y:{beginAtZero:true, ticks:{color:'#666', stepSize:1}}, x:{ticks:{color:'#666', font:{size:8}}}}, plugins:{legend:{display:false}}} });
+        }
+        function resetTotale() { if(confirm("Vuoi azzerare solo le vittorie inserite nel calendario?")) { db = {}; localStorage.removeItem('sceriffi_db_v2'); render(); } }
+        function cambiaMese(d) { dataVis.setMonth(dataVis.getMonth()+d); render(); }
+        window.onload = render;
+    </script>
+</body>
+</html>
