@@ -118,7 +118,7 @@
         let nomiSorteggio = [...nomi];
         const colori = ['#38bdf8', '#fbbf24', '#34d399'];
         
-        // INCOLLA IL TUO NUMERO CASUALE DI JSONBLOB AL POSTO DI: IL_TUO_NUMERO_BLOB
+        // ⚠️ SOSTITUISCI QUESTA PAROLA CON IL TUO NUMERO REALE PRESO DA JSONBLOB:
         const CLOUD_URL = 'https://jsonblob.com/api/jsonBlob/019e6978-7ab4-798a-84b1-d3fc80fdc4e2';
         
         let db = {};
@@ -133,6 +133,7 @@
                     db = await response.json();
                 } else {
                     db = {};
+                    alert("⚠️ Impossibile leggere dal cloud. Controlla l'ID del Blob alla riga 98.");
                 }
             } catch (e) {
                 console.error("Errore cloud:", e);
@@ -144,13 +145,17 @@
 
         async function salvaNelCloud() {
             try {
-                await fetch(CLOUD_URL, {
+                const response = await fetch(CLOUD_URL, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(db)
                 });
+                if (!response.ok) {
+                    alert("⚠️ ERRORE CLOUD: Il server ha rifiutato il salvataggio. L'ID alla riga 98 è errato o inesistente!");
+                }
             } catch (e) {
                 console.error("Errore nel salvataggio cloud:", e);
+                alert("⚠️ Errore di rete durante il salvataggio cloud.");
             }
         }
 
@@ -160,9 +165,9 @@
                 const parsed = JSON.parse(txt);
                 if(parsed && typeof parsed === 'object') {
                     db = parsed;
-                    await salvaNelCloud();
                     render();
-                    alert("Storico importato con successo e caricato online per tutti! 🚀");
+                    await salvaNelCloud();
+                    alert("Fase di caricamento completata! Se non hai visto errori bloccanti, i dati ora sono online. 🚀");
                 }
             } catch(e) {
                 alert("Errore nell'importazione. Assicurati di aver inserito il testo corretto della console.");
