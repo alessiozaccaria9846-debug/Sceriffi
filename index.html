@@ -90,8 +90,23 @@
                 </div>
             </section>
         </div>
-        <div style="text-align: center; opacity: 0.6; margin-bottom: 40px;"><button class="btn-danger" onclick="resetTotale()">🗑️ RESETTA SOLO LIVE</button></div>
+
+        <div style="text-align: center; margin-bottom: 40px; background: var(--card); padding: 20px; border-radius: 15px; border: 1px solid #334155;">
+            <details style="cursor: pointer; color: var(--accent); font-weight: bold; text-align: left;">
+                <summary>🔄 Migrazione Dati & Backup Condiviso</summary>
+                <div style="margin-top: 15px; color: var(--text); font-weight: normal; font-size: 0.9rem;">
+                    <p>Per spostare i vecchi dati online, apri il tuo vecchio file locale, copia il testo che trovi cliccando su "Esporta codice", poi vieni qui sul sito online, incollalo nel riquadro e clicca "Importa".</p>
+                    <textarea id="backup-box" style="width: 100%; height: 80px; background: #0f172a; color: var(--gold); border: 1px solid #334155; border-radius: 8px; padding: 10px; font-family: monospace;"></textarea>
+                    <div style="margin-top: 10px; display: flex; gap: 10px;">
+                        <button class="nav-btn" onclick="esportaDati()" style="background: var(--green)">Esporta Codice</button>
+                        <button class="nav-btn" onclick="importaDati()" style="background: var(--gold)">Importa e Salva nel Cloud</button>
+                    </div>
+                </div>
+            </details>
+            <button class="btn-danger" onclick="resetTotale()">🗑️ RESETTA SOLO LIVE CONDIVISO</button>
+        </div>
     </div>
+
     <div id="edit-day" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#000; border:2px solid var(--accent); padding:30px; z-index:100; border-radius:15px; min-width:320px; box-shadow: 0 0 50px rgba(0,0,0,0.9);">
         <h2 id="day-title" style="color:var(--gold); margin-top:0;">Giorno</h2><div id="edit-list"></div>
         <button class="nav-btn" onclick="document.getElementById('edit-day').style.display='none'" style="width:100%; margin-top:20px;">Salva e Chiudi</button>
@@ -103,9 +118,65 @@
         const nomi = Object.keys(BASE_ALL_TIME);
         let nomiSorteggio = [...nomi];
         const colori = ['#38bdf8', '#fbbf24', '#34d399'];
-        let db = JSON.parse(localStorage.getItem('sceriffi_db_v2')) || {};
+        
+        // URL DATABASE CLOUD UNIFICATO PER TUTTI (Generato un ID sicuro)
+        const CLOUD_URL = 'https://kvdb.io/SceriffiSharedGroupDatabase2026/db_v2';
+        
+        let db = {};
         let dataVis = new Date();
         let charts = {};
+
+        // Funzioni Cloud Sync
+        async function caricaDalCloud() {
+            try {
+                document.getElementById('match-display').innerText = "Connessione al database cloud...";
+                const response = await fetch(CLOUD_URL);
+                if (response.ok) {
+                    db = await response.json();
+                } else {
+                    db = JSON.parse(localStorage.getItem('sceriffi_db_v2')) || {};
+                }
+            } catch (e) {
+                console.error("Errore cloud, uso locale di backup:", e);
+                db = JSON.parse(localStorage.getItem('sceriffi_db_v2')) || {};
+            }
+            document.getElementById('match-display').innerText = "In attesa di sorteggio...";
+            render();
+        }
+
+        async function salvaNelCloud() {
+            localStorage.setItem('sceriffi_db_v2', JSON.stringify(db));
+            try {
+                await fetch(CLOUD_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(db)
+                });
+            } catch (e) {
+                console.error("Errore nel salvataggio cloud:", e);
+            }
+        }
+
+        // Funzioni di Backup Manuale per Migrazione
+        function esportaDati() {
+            document.getElementById('backup-box').value = JSON.stringify(db);
+            alert("Codice di sblocco generato nel riquadro! Copialo interamente.");
+        }
+
+        async function importaDati() {
+            const txt = document.getElementById('backup-box').value;
+            try {
+                const parsed = JSON.parse(txt);
+                if(typeof parsed === 'object') {
+                    db = parsed;
+                    await salvaNelCloud();
+                    render();
+                    alert("Storico importato con successo e caricato online per tutti!");
+                }
+            } catch(e) {
+                alert("Errore nell'importazione. Assicurati di aver incollato il codice corretto.");
+            }
+        }
 
         function editNomi() {
             let input = prompt("Inserisci i nomi per il sorteggio (separati da virgola):", nomiSorteggio.join(", "));
@@ -171,16 +242,14 @@
             
             const lastDay = new Date(y, m + 1, 0).getDate();
             
-            // FILTRAGGIO COMPLETO: Isola solo i giorni da Lunedì a Venerdì del mese in esame
             let giorniLavorativi = [];
             for (let d = 1; d <= lastDay; d++) {
                 let dayOfWeek = new Date(y, m, d).getDay();
-                if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Esclude Domenica (0) e Sabato (6)
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
                     giorniLavorativi.push(`${yearKey}-${monthKey}-${String(d).padStart(2, '0')}`);
                 }
             }
 
-            // 1. Calcolo Killer del fotofinish (ultimi 3 giorni LAVORATIVI effettivi del mese)
             let fotofinishScores = {};
             nomi.forEach(n => fotofinishScores[n] = 0);
             
@@ -195,7 +264,6 @@
             });
             let killerDisplay = maxFoto > 0 ? `${killerName} (${maxFoto} ⭐)` : "Nessuno ancora";
 
-            // 2. Calcolo Strisce e Letarghi (ciclato sequenzialmente SOLO sui giorni feriali)
             let streaks = {}, letarghi = {};
             nomi.forEach(n => { streaks[n] = { max: 0, curr: 0 }; letarghi[n] = { max: 0, curr: 0 }; });
             
@@ -258,26 +326,26 @@
                 el.innerHTML += `<div style="display:flex; justify-content:space-between; margin:15px 0; align-items:center;"><b>${n}</b><div><button class="nav-btn" onclick="set('${k}','${n}',-1)">-</button><span style="width:40px; display:inline-block; text-align:center; font-weight:bold; color:var(--gold)">${v}</span><button class="nav-btn" onclick="set('${k}','${n}',1)">+</button></div></div>`;
             });
         }
-        function set(k,n,v) {
+        async function set(k,n,v) {
             if(!db[k]) db[k] = {};
             db[k][n] = Math.max(0, (db[k][n] || 0) + v);
             if(Object.values(db[k]).reduce((a,b)=>a+b,0) === 0) delete db[k];
-            localStorage.setItem('sceriffi_db_v2', JSON.stringify(db));
             openDay(k); render();
+            await salvaNelCloud();
         }
         function updateCharts(tM, tAll, yearKey, monthKey) {
             if(!window.Chart) return;
             if(charts.p) charts.p.destroy(); if(charts.l) charts.l.destroy(); if(charts.all) charts.all.destroy();
             charts.p = new Chart(document.getElementById('pChart'), { type:'doughnut', data:{ labels:nomi, datasets:[{data:nomi.map(n=>tM[n]), backgroundColor:colori, borderWidth:0}] }, options:{ maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{color:'#fff', font:{size:10}}}}} });
             const totalSum = Object.values(tAll).reduce((a,b) => a+b, 0);
-            charts.all = new Chart(document.getElementById('allTimePieChart'), { type:'pie', data:{ labels:nomi.map(n=>`${n} (${((tAll[n]/totalSum)*100).toFixed(1)}%)`), datasets:[{data:nomi.map(n=>tAll[n]), backgroundColor:colori, borderWidth:1, borderColor: '#1e293b'}] }, options:{ maintainAspectRatio:false, layout: { padding: 10 }, plugins:{ legend:{ position:'right', labels:{color:'#fff', font:{size:11}, padding: 15}} } } });
+            charts.all = new Chart(document.getElementById('allTimePieChart'), { type:'pie', data:{ labels:nomi.map(n=>`${n} (${((tAll[n]/totalSum)*100).toFixed(1)}%)`), datasets:[{data:nomi.map(n=>tAll[n]), backgroundColor:colori, borderWidth:1, borderColor: '#1e293b'}] }, options:{ maintainAspectRatio:false, layout: { padding: 10 }, plugins:{ legend:{ position['right'], labels:{color:'#fff', font:{size:11}, padding: 15}} } } });
             const days = new Date(yearKey, monthKey, 0).getDate();
             const labs = Array.from({length:days},(_,i)=>i+1);
             charts.l = new Chart(document.getElementById('lChart'), { type:'line', data:{ labels:labs, datasets:nomi.map((n,i)=>({ label:n, borderColor:colori[i], tension:0.3, pointRadius:2, data:labs.map(d=>db[`${yearKey}-${monthKey}-${String(d).padStart(2,'0')}`]?.[n] || 0) })) }, options:{ maintainAspectRatio:false, scales:{y:{beginAtZero:true, ticks:{color:'#666', stepSize:1}}, x:{ticks:{color:'#666', font:{size:8}}}}, plugins:{legend:{display:false}}} });
         }
-        function resetTotale() { if(confirm("Vuoi azzerare solo le vittorie inserite nel calendario?")) { db = {}; localStorage.removeItem('sceriffi_db_v2'); render(); } }
+        async function resetTotale() { if(confirm("Vuoi azzerare il database condiviso?")) { db = {}; render(); await salvaNelCloud(); } }
         function cambiaMese(d) { dataVis.setMonth(dataVis.getMonth()+d); render(); }
-        window.onload = render;
+        window.onload = caricaDalCloud;
     </script>
 </body>
 </html>
