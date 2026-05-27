@@ -98,8 +98,8 @@
                     <p>Per spostare i vecchi dati online, apri il tuo vecchio file locale, copia il testo che trovi cliccando su "Esporta codice", poi vieni qui sul sito online, incollalo nel riquadro e clicca "Importa".</p>
                     <textarea id="backup-box" style="width: 100%; height: 80px; background: #0f172a; color: var(--gold); border: 1px solid #334155; border-radius: 8px; padding: 10px; font-family: monospace;"></textarea>
                     <div style="margin-top: 10px; display: flex; gap: 10px;">
-                        <button class="nav-btn" onclick="esportaDati()" style="background: var(--green)">Esporta Codice</button>
-                        <button class="nav-btn" onclick="importaDati()" style="background: var(--gold)">Importa e Salva nel Cloud</button>
+                        <button class="nav-btn" onclick="esportaDati()" style="background: var(--green); color:#000;">Esporta Codice</button>
+                        <button class="nav-btn" onclick="importaDati()" style="background: var(--gold); color:#000;">Importa e Salva nel Cloud</button>
                     </div>
                 </div>
             </details>
@@ -119,14 +119,12 @@
         let nomiSorteggio = [...nomi];
         const colori = ['#38bdf8', '#fbbf24', '#34d399'];
         
-        // URL DATABASE CLOUD UNIFICATO PER TUTTI (Generato un ID sicuro)
         const CLOUD_URL = 'https://kvdb.io/SceriffiSharedGroupDatabase2026/db_v2';
         
         let db = {};
         let dataVis = new Date();
         let charts = {};
 
-        // Funzioni Cloud Sync
         async function caricaDalCloud() {
             try {
                 document.getElementById('match-display').innerText = "Connessione al database cloud...";
@@ -157,7 +155,6 @@
             }
         }
 
-        // Funzioni di Backup Manuale per Migrazione
         function esportaDati() {
             document.getElementById('backup-box').value = JSON.stringify(db);
             alert("Codice di sblocco generato nel riquadro! Copialo interamente.");
@@ -251,7 +248,7 @@
             }
 
             let fotofinishScores = {};
-            nomi.forEach(n => fotofinishScores[n] = 0);
+            nomi.forEach(n => { fotofinishScores[n] = 0; });
             
             let ultimi3GiorniLav = giorniLavorativi.slice(-3);
             ultimi3GiorniLav.forEach(k => {
@@ -338,7 +335,7 @@
             if(charts.p) charts.p.destroy(); if(charts.l) charts.l.destroy(); if(charts.all) charts.all.destroy();
             charts.p = new Chart(document.getElementById('pChart'), { type:'doughnut', data:{ labels:nomi, datasets:[{data:nomi.map(n=>tM[n]), backgroundColor:colori, borderWidth:0}] }, options:{ maintainAspectRatio:false, plugins:{legend:{position:'bottom', labels:{color:'#fff', font:{size:10}}}}} });
             const totalSum = Object.values(tAll).reduce((a,b) => a+b, 0);
-            charts.all = new Chart(document.getElementById('allTimePieChart'), { type:'pie', data:{ labels:nomi.map(n=>`${n} (${((tAll[n]/totalSum)*100).toFixed(1)}%)`), datasets:[{data:nomi.map(n=>tAll[n]), backgroundColor:colori, borderWidth:1, borderColor: '#1e293b'}] }, options:{ maintainAspectRatio:false, layout: { padding: 10 }, plugins:{ legend:{ position['right'], labels:{color:'#fff', font:{size:11}, padding: 15}} } } });
+            charts.all = new Chart(document.getElementById('allTimePieChart'), { type:'pie', data:{ labels:nomi.map(n=>`${n} (${((tAll[n]/totalSum)*100).toFixed(1)}%)`), datasets:[{data:nomi.map(n=>tAll[n]), backgroundColor:colori, borderWidth:1, borderColor: '#1e293b'}] }, options:{ maintainAspectRatio:false, layout: { padding: 10 }, plugins:{ legend:{ position: 'right', labels:{color:'#fff', font:{size:11}, padding: 15}} } } });
             const days = new Date(yearKey, monthKey, 0).getDate();
             const labs = Array.from({length:days},(_,i)=>i+1);
             charts.l = new Chart(document.getElementById('lChart'), { type:'line', data:{ labels:labs, datasets:nomi.map((n,i)=>({ label:n, borderColor:colori[i], tension:0.3, pointRadius:2, data:labs.map(d=>db[`${yearKey}-${monthKey}-${String(d).padStart(2,'0')}`]?.[n] || 0) })) }, options:{ maintainAspectRatio:false, scales:{y:{beginAtZero:true, ticks:{color:'#666', stepSize:1}}, x:{ticks:{color:'#666', font:{size:8}}}}, plugins:{legend:{display:false}}} });
