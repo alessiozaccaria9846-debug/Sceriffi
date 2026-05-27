@@ -45,7 +45,7 @@
 <body>
     <div class="main-container">
         <h1 style="text-align:center; margin-bottom:0;">🏆 Portale Sceriffi</h1>
-        <div style="text-align:center; color:var(--green); font-size:0.8rem; font-weight:bold; margin-bottom:20px; letter-spacing:1px;">☁️ BACKEND CONDIVISO PRONTO (KVDB)</div>
+        <div id="cloud-status" style="text-align:center; color:var(--accent); font-size:0.8rem; font-weight:bold; margin-bottom:20px; letter-spacing:1px;">🔄 CONNESSIONE CLOUD IN CORSO...</div>
         
         <div id="main-sortable">
             <section class="draggable-section" data-id="roulette">
@@ -97,7 +97,7 @@
             <details style="cursor: pointer; color: var(--accent); font-weight: bold; text-align: left;">
                 <summary>🔄 Migrazione Dati Cloud (Sincronizzazione Diretta)</summary>
                 <div style="margin-top: 15px; color: var(--text); font-weight: normal; font-size: 0.9rem;">
-                    <p>Incolla qui il codice copiato dalla console del vecchio file locale:</p>
+                    <p>Incolla qui sotto il codice estratto dalla Console del file locale:</p>
                     <textarea id="backup-box" style="width: 100%; height: 80px; background: #0f172a; color: var(--gold); border: 1px solid #334155; border-radius: 8px; padding: 10px; font-family: monospace;"></textarea>
                     <div style="margin-top: 10px;">
                         <button class="nav-btn" onclick="importaDati()" style="background: var(--gold); color:#000; padding:10px 20px;">Importa nel database Cloud</button>
@@ -120,40 +120,40 @@
         let nomiSorteggio = [...nomi];
         const colori = ['#38bdf8', '#fbbf24', '#34d399'];
         
-        // URL KVDB già configurato privatamente e pronto all'uso
-        const CLOUD_URL = 'https://kvdb.io/Sceriffi2026_SecureStorageDB_v4/main_data_store';
+        // ⚠️ INCOLLA IL TUO ID DI JSONBLOB AL POSTO DI: IL_TUO_NUMERO_DI_JSONBLOB
+        const CLOUD_URL = 'https://jsonblob.com/api/jsonBlob/019e6990-e0e9-7b78-83d0-6583fd843de4';
         
         let db = {};
         let dataVis = new Date();
         let charts = {};
 
         async function caricaDalCloud() {
+            const statusEl = document.getElementById('cloud-status');
             try {
                 const response = await fetch(CLOUD_URL);
                 if (response.ok) {
                     db = await response.json();
+                    statusEl.innerText = "☁️ CLOUD SINCRONIZZATO (JSONBLOB)";
+                    statusEl.style.color = "var(--green)";
                 } else {
-                    db = {}; // Se dà 404 significa che il database cloud è nuovo e ancora vuoto
+                    statusEl.innerText = "⚠️ ERRORE: ID BLOB NON VALIDO ALLA RIGA 98";
+                    statusEl.style.color = "var(--red)";
                 }
             } catch (e) {
-                console.error(e);
-                db = {};
+                statusEl.innerText = "⚠️ ERRORE DI RETE (CONTROLLA ADBLOCK)";
+                statusEl.style.color = "var(--red)";
             }
             render();
         }
 
         async function salvaNelCloud() {
-            try {
-                const response = await fetch(CLOUD_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(db)
-                });
-                if (!response.ok) {
-                    alert("⚠️ Errore di risposta dal server durante il salvataggio.");
-                }
-            } catch (e) {
-                console.error(e);
-                alert("⚠️ Errore di connessione o AdBlock attivo che blocca il database cloud.");
+            const response = await fetch(CLOUD_URL, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(db)
+            });
+            if (!response.ok) {
+                throw new Error("Il server Cloud ha rifiutato il salvataggio. Controlla l'ID del Blob.");
             }
         }
 
@@ -163,12 +163,12 @@
                 const parsed = JSON.parse(txt);
                 if(parsed && typeof parsed === 'object') {
                     db = parsed;
+                    await salvaNelCloud(); // Se fallisce, va dritta nel catch e si blocca!
                     render();
-                    await salvaNelCloud();
-                    alert("STORICO CARICATO ONLINE CON SUCCESSO! Ora tutti vedranno gli stessi dati! 🚀");
+                    alert("STORICO CARICATO ONLINE CON SUCCESSO! Ora è permanente per tutti! 🚀");
                 }
             } catch(e) {
-                alert("Errore. Assicurati di aver incollato il testo corretto preso dalla console.");
+                alert("❌ ERRORE DI SALVATAGGIO:\n" + e.message + "\n\nI dati NON sono stati salvati online.");
             }
         }
 
@@ -325,7 +325,11 @@
             db[k][n] = Math.max(0, (db[k][n] || 0) + v);
             if(Object.values(db[k]).reduce((a,b)=>a+b,0) === 0) delete db[k];
             openDay(k); render();
-            await salvaNelCloud();
+            try {
+                await salvaNelCloud();
+            } catch(e) {
+                alert("❌ ERRORE: La stella non è stata salvata online. Controlla la rete o l'ID Blob.");
+            }
         }
         function updateCharts(tM, tAll, yearKey, monthKey) {
             if(!window.Chart) return;
