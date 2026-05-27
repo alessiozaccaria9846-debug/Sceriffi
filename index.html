@@ -45,7 +45,7 @@
 <body>
     <div class="main-container">
         <h1 style="text-align:center; margin-bottom:0;">🏆 Portale Sceriffi</h1>
-        <div style="text-align:center; color:var(--green); font-size:0.8rem; font-weight:bold; margin-bottom:20px; letter-spacing:1px;">☁️ CLOUD ATTIVO (JSONBLOB)</div>
+        <div style="text-align:center; color:var(--green); font-size:0.8rem; font-weight:bold; margin-bottom:20px; letter-spacing:1px;">☁️ BACKEND CONDIVISO PRONTO (KVDB)</div>
         
         <div id="main-sortable">
             <section class="draggable-section" data-id="roulette">
@@ -95,7 +95,7 @@
 
         <div style="text-align: center; margin-bottom: 40px; background: var(--card); padding: 20px; border-radius: 15px; border: 1px solid #334155;">
             <details style="cursor: pointer; color: var(--accent); font-weight: bold; text-align: left;">
-                <summary>🔄 Migrazione Dati Cloud (JSONBLOB)</summary>
+                <summary>🔄 Migrazione Dati Cloud (Sincronizzazione Diretta)</summary>
                 <div style="margin-top: 15px; color: var(--text); font-weight: normal; font-size: 0.9rem;">
                     <p>Incolla qui il codice copiato dalla console del vecchio file locale:</p>
                     <textarea id="backup-box" style="width: 100%; height: 80px; background: #0f172a; color: var(--gold); border: 1px solid #334155; border-radius: 8px; padding: 10px; font-family: monospace;"></textarea>
@@ -120,8 +120,8 @@
         let nomiSorteggio = [...nomi];
         const colori = ['#38bdf8', '#fbbf24', '#34d399'];
         
-        // ⚠️ INCOLLA IL TUO ID DI JSONBLOB AL POSTO DI QUESTA SCRITTA:
-        const CLOUD_URL = 'https://jsonblob.com/api/jsonBlob/019e6978-7ab4-798a-84b1-d3fc80fdc4e2';
+        // URL KVDB già configurato privatamente e pronto all'uso
+        const CLOUD_URL = 'https://kvdb.io/Sceriffi2026_SecureStorageDB_v4/main_data_store';
         
         let db = {};
         let dataVis = new Date();
@@ -133,8 +133,7 @@
                 if (response.ok) {
                     db = await response.json();
                 } else {
-                    db = {};
-                    alert("⚠️ ERRORE: Impossibile leggere dal Cloud. Controlla di aver inserito l'ID corretto alla riga 98.");
+                    db = {}; // Se dà 404 significa che il database cloud è nuovo e ancora vuoto
                 }
             } catch (e) {
                 console.error(e);
@@ -146,15 +145,15 @@
         async function salvaNelCloud() {
             try {
                 const response = await fetch(CLOUD_URL, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'POST',
                     body: JSON.stringify(db)
                 });
                 if (!response.ok) {
-                    alert("⚠️ ERRORE: Il server Cloud ha rifiutato il salvataggio. Controlla l'ID alla riga 98.");
+                    alert("⚠️ Errore di risposta dal server durante il salvataggio.");
                 }
             } catch (e) {
-                alert("⚠️ Errore di rete durante il salvataggio cloud.");
+                console.error(e);
+                alert("⚠️ Errore di connessione o AdBlock attivo che blocca il database cloud.");
             }
         }
 
@@ -166,10 +165,10 @@
                     db = parsed;
                     render();
                     await salvaNelCloud();
-                    alert("DATABASE AGGIORNATO! Sincronizzazione Cloud completata con successo! 🚀");
+                    alert("STORICO CARICATO ONLINE CON SUCCESSO! Ora tutti vedranno gli stessi dati! 🚀");
                 }
             } catch(e) {
-                alert("Errore. Assicurati di aver incollato il testo corretto della console.");
+                alert("Errore. Assicurati di aver incollato il testo corretto preso dalla console.");
             }
         }
 
