@@ -120,8 +120,14 @@
         let nomiSorteggio = [...nomi];
         const colori = ['#38bdf8', '#fbbf24', '#34d399'];
         
-        // ⚠️ INCOLLA IL TUO ID DI JSONBLOB AL POSTO DI: IL_TUO_NUMERO_DI_JSONBLOB
-        const CLOUD_URL = 'https://jsonblob.com/api/jsonBlob/019e6990-e0e9-7b78-83d0-6583fd843de4';
+        // ⚠️ INCOLLA PURE TUTTO IL LINK O SOLO L'ID QUI DENTRO:
+        let ACCOUNT_BLOB = "https://jsonblob.com/019e6990-e0e9-7b78-83d0-6583fd843de4";
+        
+        // SISTEMA INTELLIGENTE DI PULIZIA URL
+        if (ACCOUNT_BLOB.includes("/")) {
+            ACCOUNT_BLOB = ACCOUNT_BLOB.trim().split("/").pop();
+        }
+        const CLOUD_URL = 'https://jsonblob.com/api/jsonBlob/' + ACCOUNT_BLOB;
         
         let db = {};
         let dataVis = new Date();
@@ -140,7 +146,7 @@
                     statusEl.style.color = "var(--red)";
                 }
             } catch (e) {
-                statusEl.innerText = "⚠️ ERRORE DI RETE (CONTROLLA ADBLOCK)";
+                statusEl.innerText = "⚠️ ERRORE DI CONFIGURAZIONE INDIRIZZO URL";
                 statusEl.style.color = "var(--red)";
             }
             render();
@@ -153,7 +159,7 @@
                 body: JSON.stringify(db)
             });
             if (!response.ok) {
-                throw new Error("Il server Cloud ha rifiutato il salvataggio. Controlla l'ID del Blob.");
+                throw new Error("Salvataggio rifiutato dal server cloud.");
             }
         }
 
@@ -163,12 +169,12 @@
                 const parsed = JSON.parse(txt);
                 if(parsed && typeof parsed === 'object') {
                     db = parsed;
-                    await salvaNelCloud(); // Se fallisce, va dritta nel catch e si blocca!
+                    await salvaNelCloud(); // Se fallisce va direttamente nel catch sotto!
                     render();
                     alert("STORICO CARICATO ONLINE CON SUCCESSO! Ora è permanente per tutti! 🚀");
                 }
             } catch(e) {
-                alert("❌ ERRORE DI SALVATAGGIO:\n" + e.message + "\n\nI dati NON sono stati salvati online.");
+                alert("❌ ERRORE DI SALVATAGGIO:\n" + e.message + "\n\nI dati NON sono finiti nel cloud.");
             }
         }
 
@@ -328,7 +334,7 @@
             try {
                 await salvaNelCloud();
             } catch(e) {
-                alert("❌ ERRORE: La stella non è stata salvata online. Controlla la rete o l'ID Blob.");
+                alert("❌ ERRORE: Stella non salvata sul cloud.\n" + e.message);
             }
         }
         function updateCharts(tM, tAll, yearKey, monthKey) {
